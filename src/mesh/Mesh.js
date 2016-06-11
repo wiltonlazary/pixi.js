@@ -7,8 +7,8 @@ var core = require('../core'),
  * @class
  * @extends PIXI.Container
  * @memberof PIXI.mesh
- * @param texture {Texture} The texture to use
- * @param [vertices] {Float32Arrif you want to specify the vertices
+ * @param texture {PIXI.Texture} The texture to use
+ * @param [vertices] {Float32Array} if you want to specify the vertices
  * @param [uvs] {Float32Array} if you want to specify the uvs
  * @param [indices] {Uint16Array} if you want to specify the indices
  * @param [drawMode] {number} the drawMode, can be any of the Mesh.DRAW_MODES consts
@@ -20,7 +20,7 @@ function Mesh(texture, vertices, uvs, indices, drawMode)
     /**
      * The texture of the Mesh
      *
-     * @member {Texture}
+     * @member {PIXI.Texture}
      * @private
      */
     this._texture = null;
@@ -30,9 +30,9 @@ function Mesh(texture, vertices, uvs, indices, drawMode)
      *
      * @member {Float32Array}
      */
-    this.uvs = uvs || new Float32Array([0, 1,
-        1, 1,
+    this.uvs = uvs || new Float32Array([0, 0,
         1, 0,
+        1, 1,
         0, 1]);
 
     /**
@@ -49,7 +49,7 @@ function Mesh(texture, vertices, uvs, indices, drawMode)
      * @member {Uint16Array} An array containing the indices of the vertices
      */
     //  TODO auto generate this based on draw mode!
-    this.indices = indices || new Uint16Array([0, 1, 2, 3]);
+    this.indices = indices || new Uint16Array([0, 1, 3, 2]);
 
     /**
      * Whether the Mesh is dirty or not
@@ -59,10 +59,11 @@ function Mesh(texture, vertices, uvs, indices, drawMode)
     this.dirty = true;
 
     /**
-     * The blend mode to be applied to the sprite. Set to blendModes.NORMAL to remove any blend mode.
+     * The blend mode to be applied to the sprite. Set to `PIXI.BLEND_MODES.NORMAL` to remove any blend mode.
      *
      * @member {number}
-     * @default CONST.BLEND_MODES.NORMAL;
+     * @default PIXI.BLEND_MODES.NORMAL
+     * @see PIXI.BLEND_MODES
      */
     this.blendMode = core.BLEND_MODES.NORMAL;
 
@@ -74,14 +75,22 @@ function Mesh(texture, vertices, uvs, indices, drawMode)
     this.canvasPadding = 0;
 
     /**
-     * The way the Mesh should be drawn, can be any of the Mesh.DRAW_MODES consts
+     * The way the Mesh should be drawn, can be any of the {@link PIXI.mesh.Mesh.DRAW_MODES} consts
      *
      * @member {number}
+     * @see PIXI.mesh.Mesh.DRAW_MODES
      */
     this.drawMode = drawMode || Mesh.DRAW_MODES.TRIANGLE_MESH;
 
     // run texture setter;
     this.texture = texture;
+
+     /**
+     * The default shader that is used if a mesh doesn't have a more specific one.
+     *
+     * @member {PIXI.Shader}
+     */
+    this.shader = null;
 }
 
 // constructor
@@ -129,7 +138,7 @@ Object.defineProperties(Mesh.prototype, {
 /**
  * Renders the object using the WebGL renderer
  *
- * @param renderer {WebGLRenderer} a reference to the WebGL renderer
+ * @param renderer {PIXI.WebGLRenderer} a reference to the WebGL renderer
  * @private
  */
 Mesh.prototype._renderWebGL = function (renderer)
@@ -141,7 +150,7 @@ Mesh.prototype._renderWebGL = function (renderer)
 /**
  * Renders the object using the Canvas renderer
  *
- * @param renderer {CanvasRenderer}
+ * @param renderer {PIXI.CanvasRenderer}
  * @private
  */
 Mesh.prototype._renderCanvas = function (renderer)
@@ -149,14 +158,15 @@ Mesh.prototype._renderCanvas = function (renderer)
     var context = renderer.context;
 
     var transform = this.worldTransform;
+    var res = renderer.resolution;
 
     if (renderer.roundPixels)
     {
-        context.setTransform(transform.a, transform.b, transform.c, transform.d, transform.tx | 0, transform.ty | 0);
+        context.setTransform(transform.a * res, transform.b * res, transform.c * res, transform.d * res, (transform.tx * res) | 0, (transform.ty * res) | 0);
     }
     else
     {
-        context.setTransform(transform.a, transform.b, transform.c, transform.d, transform.tx, transform.ty);
+        context.setTransform(transform.a * res, transform.b * res, transform.c * res, transform.d * res, transform.tx * res, transform.ty * res);
     }
 
     if (this.drawMode === Mesh.DRAW_MODES.TRIANGLE_MESH)
@@ -229,15 +239,16 @@ Mesh.prototype._renderCanvasTriangles = function (context)
  */
 Mesh.prototype._renderCanvasDrawTriangle = function (context, vertices, uvs, index0, index1, index2)
 {
-    var textureSource = this._texture.baseTexture.source;
-    var textureWidth = this._texture.baseTexture.width;
-    var textureHeight = this._texture.baseTexture.height;
+    var base = this._texture.baseTexture;
+    var textureSource = base.source;
+    var textureWidth = base.width;
+    var textureHeight = base.height;
 
     var x0 = vertices[index0], x1 = vertices[index1], x2 = vertices[index2];
     var y0 = vertices[index0 + 1], y1 = vertices[index1 + 1], y2 = vertices[index2 + 1];
 
-    var u0 = uvs[index0] * textureWidth, u1 = uvs[index1] * textureWidth, u2 = uvs[index2] * textureWidth;
-    var v0 = uvs[index0 + 1] * textureHeight, v1 = uvs[index1 + 1] * textureHeight, v2 = uvs[index2 + 1] * textureHeight;
+    var u0 = uvs[index0] * base.width, u1 = uvs[index1] * base.width, u2 = uvs[index2] * base.width;
+    var v0 = uvs[index0 + 1] * base.height, v1 = uvs[index1 + 1] * base.height, v2 = uvs[index2 + 1] * base.height;
 
     if (this.canvasPadding > 0)
     {
@@ -295,7 +306,7 @@ Mesh.prototype._renderCanvasDrawTriangle = function (context, vertices, uvs, ind
         deltaB / delta, deltaE / delta,
         deltaC / delta, deltaF / delta);
 
-    context.drawImage(textureSource, 0, 0);
+    context.drawImage(textureSource, 0, 0, textureWidth * base.resolution, textureHeight * base.resolution, 0, 0, textureWidth, textureHeight);
     context.restore();
 };
 
@@ -304,7 +315,7 @@ Mesh.prototype._renderCanvasDrawTriangle = function (context, vertices, uvs, ind
 /**
  * Renders a flat Mesh
  *
- * @param Mesh {Mesh} The Mesh to render
+ * @param Mesh {PIXI.mesh.Mesh} The Mesh to render
  * @private
  */
 Mesh.prototype.renderMeshFlat = function (Mesh)
@@ -334,21 +345,6 @@ Mesh.prototype.renderMeshFlat = function (Mesh)
     context.closePath();
 };
 
-/*
- Mesh.prototype.setTexture = function (texture)
- {
- //TODO SET THE TEXTURES
- //TODO VISIBILITY
- //TODO SETTER
-
- // stop current texture
- this.texture = texture;
- this.width   = texture.frame.width;
- this.height  = texture.frame.height;
- this.updateFrame = true;
- };
- */
-
 /**
  * When the texture is updated, this event will fire to update the scale and frame
  *
@@ -363,8 +359,8 @@ Mesh.prototype._onTextureUpdate = function ()
 /**
  * Returns the bounds of the mesh as a rectangle. The bounds calculation takes the worldTransform into account.
  *
- * @param matrix {Matrix} the transformation matrix of the sprite
- * @return {Rectangle} the framing rectangle
+ * @param matrix {PIXI.Matrix} the transformation matrix of the sprite
+ * @return {PIXI.Rectangle} the framing rectangle
  */
 Mesh.prototype.getBounds = function (matrix)
 {
@@ -419,7 +415,7 @@ Mesh.prototype.getBounds = function (matrix)
 /**
  * Tests if a point is inside this mesh. Works only for TRIANGLE_MESH
  *
- * @param point {Point} the point to test
+ * @param point {PIXI.Point} the point to test
  * @return {boolean} the result of the test
  */
 Mesh.prototype.containsPoint = function( point ) {
@@ -464,6 +460,7 @@ Mesh.prototype.containsPoint = function( point ) {
     }
     return false;
 };
+
 /**
  * Different drawing buffer modes supported
  *

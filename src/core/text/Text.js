@@ -26,11 +26,14 @@ var Sprite = require('../sprites/Sprite'),
  * @param [style.strokeThickness=0] {number} A number that represents the thickness of the stroke. Default is 0 (no stroke)
  * @param [style.wordWrap=false] {boolean} Indicates if word wrap should be used
  * @param [style.wordWrapWidth=100] {number} The width at which text will wrap, it needs wordWrap to be set to true
+ * @param [style.letterSpacing=0] {number} The amount of spacing between letters, default is 0
+ * @param [style.breakWords=false] {boolean} Indicates if lines can be wrapped within words, it needs wordWrap to be set to true
  * @param [style.lineHeight] {number} The line height, a number that represents the vertical space that a letter uses
  * @param [style.dropShadow=false] {boolean} Set a drop shadow for the text
  * @param [style.dropShadowColor='#000000'] {string} A fill style to be used on the dropshadow e.g 'red', '#00FF00'
  * @param [style.dropShadowAngle=Math.PI/4] {number} Set a angle of the drop shadow
  * @param [style.dropShadowDistance=5] {number} Set a distance of the drop shadow
+ * @param [style.dropShadowBlur=0] {number} Set a shadow blur radius
  * @param [style.padding=0] {number} Occasionally some fonts are cropped on top or bottom. Adding some padding will
  *      prevent this from happening by adding padding to the top and bottom of text height.
  * @param [style.textBaseline='alphabetic'] {string} The baseline of the text that is rendered.
@@ -98,7 +101,7 @@ Object.defineProperties(Text.prototype, {
      * The width of the Text, setting this will actually modify the scale to achieve the value set
      *
      * @member {number}
-     * @memberof Text#
+     * @memberof PIXI.Text#
      */
     width: {
         get: function ()
@@ -121,7 +124,7 @@ Object.defineProperties(Text.prototype, {
      * The height of the Text, setting this will actually modify the scale to achieve the value set
      *
      * @member {number}
-     * @memberof Text#
+     * @memberof PIXI.Text#
      */
     height: {
         get: function ()
@@ -156,6 +159,7 @@ Object.defineProperties(Text.prototype, {
      * @param [style.dropShadowColor='#000000'] {string|number} A fill style to be used on the dropshadow e.g 'red', '#00FF00'
      * @param [style.dropShadowAngle=Math.PI/6] {number} Set a angle of the drop shadow
      * @param [style.dropShadowDistance=5] {number} Set a distance of the drop shadow
+     * @param [style.dropShadowBlur=0] {number} Set a shadow blur radius
      * @param [style.padding=0] {number} Occasionally some fonts are cropped on top or bottom. Adding some padding will
      *      prevent this from happening by adding padding to the top and bottom of text height.
      * @param [style.textBaseline='alphabetic'] {string} The baseline of the text that is rendered.
@@ -163,7 +167,7 @@ Object.defineProperties(Text.prototype, {
      *      spiked text issues. Default is 'miter' (creates a sharp corner).
      * @param [style.miterLimit=10] {number} The miter limit to use when using the 'miter' lineJoin mode. This can reduce
      *      or increase the spikiness of rendered text.
-     * @memberof Text#
+     * @memberof PIXI.Text#
      */
     style: {
         get: function ()
@@ -189,15 +193,18 @@ Object.defineProperties(Text.prototype, {
             style.font = style.font || 'bold 20pt Arial';
             style.fill = style.fill || 'black';
             style.align = style.align || 'left';
-            style.stroke = style.stroke || 'black'; //provide a default, see: https://github.com/GoodBoyDigital/pixi.js/issues/136
+            style.stroke = style.stroke || 'black'; //provide a default, see: https://github.com/pixijs/pixi.js/issues/136
             style.strokeThickness = style.strokeThickness || 0;
             style.wordWrap = style.wordWrap || false;
             style.wordWrapWidth = style.wordWrapWidth || 100;
+            style.breakWords = style.breakWords || false;
+            style.letterSpacing = style.letterSpacing || 0;
 
             style.dropShadow = style.dropShadow || false;
             style.dropShadowColor = style.dropShadowColor || '#000000';
-            style.dropShadowAngle = style.dropShadowAngle || Math.PI / 6;
-            style.dropShadowDistance = style.dropShadowDistance || 5;
+            style.dropShadowAngle = style.dropShadowAngle !== undefined ? style.dropShadowAngle : Math.PI / 6;
+            style.dropShadowDistance = style.dropShadowDistance !== undefined ? style.dropShadowDistance : 5;
+            style.dropShadowBlur = style.dropShadowBlur !== undefined ? style.dropShadowBlur : 0; //shadowBlur is '0' by default according to HTML
 
             style.padding = style.padding || 0;
 
@@ -215,7 +222,7 @@ Object.defineProperties(Text.prototype, {
      * Set the copy for the text object. To split a line you can use '\n'.
      *
      * @param text {string} The copy that you would like the text to display
-     * @memberof Text#
+     * @memberof PIXI.Text#
      */
     text: {
         get: function()
@@ -257,7 +264,7 @@ Text.prototype.updateText = function ()
     var fontProperties = this.determineFontProperties(style.font);
     for (var i = 0; i < lines.length; i++)
     {
-        var lineWidth = this.context.measureText(lines[i]).width;
+        var lineWidth = this.context.measureText(lines[i]).width + ((lines[i].length - 1) * style.letterSpacing);
         lineWidths[i] = lineWidth;
         maxLineWidth = Math.max(maxLineWidth, lineWidth);
     }
@@ -268,7 +275,7 @@ Text.prototype.updateText = function ()
         width += style.dropShadowDistance;
     }
 
-    this.canvas.width = ( width + this.context.lineWidth ) * this.resolution;
+    this.canvas.width = Math.ceil( ( width + this.context.lineWidth ) * this.resolution );
 
     // calculate text height
     var lineHeight = this.style.lineHeight || fontProperties.fontSize + style.strokeThickness;
@@ -279,7 +286,7 @@ Text.prototype.updateText = function ()
         height += style.dropShadowDistance;
     }
 
-    this.canvas.height = ( height + this._style.padding * 2 ) * this.resolution;
+    this.canvas.height = Math.ceil( ( height + this._style.padding * 2 ) * this.resolution );
 
     this.context.scale( this.resolution, this.resolution);
 
@@ -304,7 +311,12 @@ Text.prototype.updateText = function ()
 
     if (style.dropShadow)
     {
-        this.context.fillStyle = style.dropShadowColor;
+        if (style.dropShadowBlur > 0) {
+            this.context.shadowColor = style.dropShadowColor;
+            this.context.shadowBlur = style.dropShadowBlur;
+        } else {
+            this.context.fillStyle = style.dropShadowColor;
+        }
 
         var xShadowOffset = Math.cos(style.dropShadowAngle) * style.dropShadowDistance;
         var yShadowOffset = Math.sin(style.dropShadowAngle) * style.dropShadowDistance;
@@ -325,7 +337,7 @@ Text.prototype.updateText = function ()
 
             if (style.fill)
             {
-                this.context.fillText(lines[i], linePositionX + xShadowOffset, linePositionY + yShadowOffset + this._style.padding);
+                this.drawLetterSpacing(lines[i], linePositionX + xShadowOffset, linePositionY + yShadowOffset + style.padding);
             }
         }
     }
@@ -350,16 +362,61 @@ Text.prototype.updateText = function ()
 
         if (style.stroke && style.strokeThickness)
         {
-            this.context.strokeText(lines[i], linePositionX, linePositionY + this._style.padding);
+            this.drawLetterSpacing(lines[i], linePositionX, linePositionY + style.padding, true);
         }
 
         if (style.fill)
         {
-            this.context.fillText(lines[i], linePositionX, linePositionY + this._style.padding);
+            this.drawLetterSpacing(lines[i], linePositionX, linePositionY + style.padding);
         }
     }
 
     this.updateTexture();
+};
+
+/**
+ * Render the text with letter-spacing.
+ *
+ * @private
+ */
+Text.prototype.drawLetterSpacing = function(text, x, y, isStroke)
+{
+    var style = this._style;
+
+    // letterSpacing of 0 means normal
+    var letterSpacing = style.letterSpacing;
+
+    if (letterSpacing === 0)
+    {
+        if (isStroke)
+        {
+            this.context.strokeText(text, x, y);
+        }
+        else
+        {
+            this.context.fillText(text, x, y);
+        }
+        return;
+    }
+
+    var characters = String.prototype.split.call(text, ''),
+        index = 0,
+        current,
+        currentPosition = x;
+
+    while (index < text.length)
+    {
+        current = characters[index++];
+        if (isStroke) 
+        {
+            this.context.strokeText(current, currentPosition, y);
+        }
+        else
+        {
+            this.context.fillText(current, currentPosition, y);
+        }
+        currentPosition += this.context.measureText(current).width + letterSpacing;
+    }
 };
 
 /**
@@ -370,6 +427,7 @@ Text.prototype.updateText = function ()
 Text.prototype.updateTexture = function ()
 {
     var texture = this._texture;
+    var style = this._style;
 
     texture.baseTexture.hasLoaded = true;
     texture.baseTexture.resolution = this.resolution;
@@ -380,10 +438,10 @@ Text.prototype.updateTexture = function ()
     texture.crop.height = texture._frame.height = this.canvas.height / this.resolution;
 
     texture.trim.x = 0;
-    texture.trim.y = -this._style.padding;
+    texture.trim.y = -style.padding;
 
     texture.trim.width = texture._frame.width;
-    texture.trim.height = texture._frame.height - this._style.padding*2;
+    texture.trim.height = texture._frame.height - style.padding*2;
 
     this._width = this.canvas.width / this.resolution;
     this._height = this.canvas.height / this.resolution;
@@ -396,7 +454,7 @@ Text.prototype.updateTexture = function ()
 /**
  * Renders the object using the WebGL renderer
  *
- * @param renderer {WebGLRenderer}
+ * @param renderer {PIXI.WebGLRenderer}
  */
 Text.prototype.renderWebGL = function (renderer)
 {
@@ -413,7 +471,7 @@ Text.prototype.renderWebGL = function (renderer)
 /**
  * Renders the object using the Canvas renderer
  *
- * @param renderer {CanvasRenderer}
+ * @param renderer {PIXI.CanvasRenderer}
  * @private
  */
 Text.prototype._renderCanvas = function (renderer)
@@ -551,22 +609,48 @@ Text.prototype.wordWrap = function (text)
         for (var j = 0; j < words.length; j++)
         {
             var wordWidth = this.context.measureText(words[j]).width;
-            var wordWidthWithSpace = wordWidth + this.context.measureText(' ').width;
-            if (j === 0 || wordWidthWithSpace > spaceLeft)
+            if (this._style.breakWords && wordWidth > wordWrapWidth) 
             {
-                // Skip printing the newline if it's the first word of the line that is
-                // greater than the word wrap width.
-                if (j > 0)
+                // Word should be split in the middle
+                var characters = words[j].split('');
+                for (var c = 0; c < characters.length; c++) 
                 {
-                    result += '\n';
+                  var characterWidth = this.context.measureText(characters[c]).width;
+                  if (characterWidth > spaceLeft) 
+                  {
+                    result += '\n' + characters[c];
+                    spaceLeft = wordWrapWidth - characterWidth;
+                  } 
+                  else 
+                  {
+                    if (c === 0) 
+                    {
+                      result += ' ';
+                    }
+                    result += characters[c];
+                    spaceLeft -= characterWidth;
+                  }
                 }
-                result += words[j];
-                spaceLeft = wordWrapWidth - wordWidth;
             }
-            else
+            else 
             {
-                spaceLeft -= wordWidthWithSpace;
-                result += ' ' + words[j];
+                var wordWidthWithSpace = wordWidth + this.context.measureText(' ').width;
+                if (j === 0 || wordWidthWithSpace > spaceLeft)
+                {
+                    // Skip printing the newline if it's the first word of the line that is
+                    // greater than the word wrap width.
+                    if (j > 0)
+                    {
+                        result += '\n';
+                    }
+                    result += words[j];
+                    spaceLeft = wordWrapWidth - wordWidth;
+                }
+                else
+                {
+                    spaceLeft -= wordWidthWithSpace;
+                    result += ' ' + words[j];
+                }
             }
         }
 
@@ -581,8 +665,8 @@ Text.prototype.wordWrap = function (text)
 /**
  * Returns the bounds of the Text as a rectangle. The bounds calculation takes the worldTransform into account.
  *
- * @param matrix {Matrix} the transformation matrix of the Text
- * @return {Rectangle} the framing rectangle
+ * @param matrix {PIXI.Matrix} the transformation matrix of the Text
+ * @return {PIXI.Rectangle} the framing rectangle
  */
 Text.prototype.getBounds = function (matrix)
 {
